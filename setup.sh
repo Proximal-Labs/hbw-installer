@@ -143,6 +143,22 @@ echo ">>> Installing harbor-workbench ($WORKBENCH_REF)..."
 uv tool install "$WORKBENCH_SPEC" --python "$PYTHON_VERSION" --force
 echo ""
 
+# ─── GCP service account for image uploads ─────────────────────────────────
+# The harbor-workbench package ships a vendored service-account key so
+# every collaborator can 'harbor-workbench upload' out of the box.
+# This step copies it to ~/.config/harbor-workbench/gcp-sa.json and runs
+# 'gcloud auth activate-service-account' + 'configure-docker'. It's
+# idempotent; safe to re-run. If gcloud isn't installed yet, the key
+# is still dropped on disk and upload subprocesses pick it up via
+# GOOGLE_APPLICATION_CREDENTIALS (direct-API paths work; docker push
+# will fail until gcloud is installed and 'harbor-workbench auth' is
+# re-run).
+if command -v harbor-workbench &>/dev/null; then
+    echo ">>> Provisioning GCP auth..."
+    harbor-workbench auth || echo "  [WARN] harbor-workbench auth failed; re-run manually once gcloud is installed."
+    echo ""
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo "============================================"
 echo " Setup Complete"
