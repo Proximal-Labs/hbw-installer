@@ -132,6 +132,42 @@ else
     echo ">>> opencode already installed"
 fi
 
+# ─── crane (used by `harbor-workbench datasets push/pull`) ──────────────────
+# go-containerregistry's `crane` lets us append / pull / retag OCI images at
+# the registry level, without materializing the dataset locally. That's the
+# whole point of the `datasets` subcommand — push a new artifact into a
+# dataset tag in O(new-file), not O(dataset).
+if ! command -v crane &>/dev/null; then
+    echo ">>> Installing crane..."
+    if $IS_MAC; then
+        if command -v brew &>/dev/null; then
+            brew install crane
+        else
+            echo "  [SKIP] Install Homebrew first, then: brew install crane"
+        fi
+    elif $IS_LINUX; then
+        # Fetch the official release tarball; /usr/local/bin is on PATH
+        # by default on every distro we care about.
+        arch="$(uname -m)"
+        case "$arch" in
+            x86_64|amd64) crane_arch=x86_64 ;;
+            aarch64|arm64) crane_arch=arm64 ;;
+            *) echo "  [SKIP] Unsupported arch for crane auto-install: $arch"; crane_arch="" ;;
+        esac
+        if [ -n "$crane_arch" ]; then
+            tmpdir="$(mktemp -d)"
+            url="https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz"
+            curl -fsSL "$url" | tar -xz -C "$tmpdir" crane
+            sudo install -m 0755 "$tmpdir/crane" /usr/local/bin/crane
+            rm -rf "$tmpdir"
+        fi
+    fi
+    command -v crane &>/dev/null && echo "  Installed: $(crane version 2>&1 | head -1)"
+    echo ""
+else
+    echo ">>> crane already installed: $(crane version 2>&1 | head -1)"
+fi
+
 # ─── Harbor (patched branch) ─────────────────────────────────────────────────
 echo ""
 echo ">>> Installing Harbor ($HARBOR_REF)..."
@@ -171,6 +207,7 @@ command -v gh &>/dev/null                && echo "    ✓ gh CLI            $(gh
 command -v claude &>/dev/null            && echo "    ✓ Claude Code       $(claude --version 2>&1 | head -1)"
 (command -v opencode &>/dev/null || [ -f "$HOME/.opencode/bin/opencode" ]) \
                                          && echo "    ✓ opencode"
+command -v crane &>/dev/null             && echo "    ✓ crane             $(crane version 2>&1 | head -1)"
 command -v harbor &>/dev/null            && echo "    ✓ Harbor            $(harbor --version 2>&1)"
 command -v harbor-workbench &>/dev/null  && echo "    ✓ harbor-workbench  $(harbor-workbench --version 2>&1 || true)"
 echo ""
