@@ -75,6 +75,36 @@ if $IS_LINUX; then
     sudo systemctl start docker 2>/dev/null || true
 fi
 
+# ─── docker buildx (Linux only — macOS gets it via Docker Desktop) ──────────
+# Ubuntu's ``docker.io`` package doesn't ship buildx; Docker's own
+# ``docker-buildx-plugin`` lives in a separate apt repo we'd rather not
+# add. Instead, drop the upstream binary as a user-level CLI plugin —
+# ``docker buildx`` discovers it automatically.
+if $IS_LINUX && ! docker buildx version &>/dev/null; then
+    echo ">>> Installing docker buildx CLI plugin..."
+    # Follow GitHub's /releases/latest redirect to get the tag — no API
+    # call, no version pinning.
+    buildx_tag="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+        https://github.com/docker/buildx/releases/latest \
+        | sed 's|.*/tag/||')"
+    case "$(uname -m)" in
+        x86_64|amd64) buildx_arch=amd64 ;;
+        aarch64|arm64) buildx_arch=arm64 ;;
+        *) buildx_arch="" ;;
+    esac
+    if [ -n "$buildx_tag" ] && [ -n "$buildx_arch" ]; then
+        mkdir -p "$HOME/.docker/cli-plugins"
+        curl -fsSL -o "$HOME/.docker/cli-plugins/docker-buildx" \
+            "https://github.com/docker/buildx/releases/download/${buildx_tag}/buildx-${buildx_tag}.linux-${buildx_arch}"
+        chmod +x "$HOME/.docker/cli-plugins/docker-buildx"
+        echo "  Installed: $HOME/.docker/cli-plugins/docker-buildx ($buildx_tag)"
+    else
+        echo "  [WARN] couldn't auto-install buildx; grab it manually:"
+        echo "         https://github.com/docker/buildx/releases/latest"
+    fi
+    echo ""
+fi
+
 # ─── uv ──────────────────────────────────────────────────────────────────────
 if ! command -v uv &>/dev/null; then
     echo ">>> Installing uv..."
@@ -202,6 +232,7 @@ echo "============================================"
 echo ""
 echo "  Installed:"
 command -v docker &>/dev/null            && echo "    ✓ Docker            $(docker --version 2>&1 | head -c 40)"
+docker buildx version &>/dev/null        && echo "    ✓ docker buildx     $(docker buildx version 2>&1 | head -1 | head -c 60)"
 command -v uv &>/dev/null                && echo "    ✓ uv                $(uv --version 2>&1)"
 command -v gh &>/dev/null                && echo "    ✓ gh CLI            $(gh --version 2>&1 | head -1)"
 command -v claude &>/dev/null            && echo "    ✓ Claude Code       $(claude --version 2>&1 | head -1)"
